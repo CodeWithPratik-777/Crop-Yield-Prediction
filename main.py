@@ -1,6 +1,9 @@
 import numpy as np
 import pickle
 import os
+import json
+import re
+import requests
 import google.generativeai as genai
 from dotenv import load_dotenv
 from datetime import datetime
@@ -8,82 +11,111 @@ import pandas as pd
 import plotly.express as px
 import streamlit as st
 
-# ---------------- PAGE CONFIG ----------------
-st.set_page_config(
-    page_title="Smart Crop Advisor AI 🌾",
-    layout="wide"
-)
+st.set_page_config(page_title="Smart Crop Advisor AI 🌾", layout="wide")
 
-# ---------------- SESSION STATE ----------------
 if "predicted" not in st.session_state:
     st.session_state.predicted = False
-
 if "last_lang" not in st.session_state:
     st.session_state.last_lang = "English"
+if "show_lang_alert" not in st.session_state:
+    st.session_state.show_lang_alert = False
 
-# ---------------- ENV ----------------
 load_dotenv()
-API_KEY = os.getenv("GOOGLE_API_KEY")
+GEMINI_KEY = os.getenv("GOOGLE_API_KEY")
+WEATHER_KEY = os.getenv("WEATHER_API_KEY")
 
-if API_KEY:
-    genai.configure(api_key=API_KEY)
+if GEMINI_KEY:
+    genai.configure(api_key=GEMINI_KEY)
     gemini_model = genai.GenerativeModel("models/gemini-flash-lite-latest")
 else:
     gemini_model = None
 
-# ---------------- TOP BAR (LANGUAGE RIGHT) ----------------
-col1, col2 = st.columns([8, 1])
+st.markdown("<h1 style='text-align:center;color:white;'>🌾 Smart Crop Advisor AI</h1>", unsafe_allow_html=True)
 
-with col2:
-    lang = st.selectbox(
-        "",
-        ["English", "Hindi", "Marathi"],
-        label_visibility="collapsed"
-    )
+sp1, sp2, lang_col = st.columns([6,1,1])
 
-# ---------------- LANGUAGE LOGIC ----------------
+with lang_col:
+    lang = st.selectbox("", ["English","Hindi","Marathi"], label_visibility="collapsed")
+
 lang_map = {
     "English": "Respond in English",
     "Hindi": "Respond in Hindi",
     "Marathi": "Respond in Marathi"
 }
 
-lang_instruction = lang_map[lang]
-
-# Detect language change after prediction
 if st.session_state.predicted and lang != st.session_state.last_lang:
-    st.warning("⚠️ Please click 'Predict Crop' again to apply language change.")
+    if not st.session_state.show_lang_alert:
+        st.toast("⚠️ Please click Predict again to apply language change")
+        st.session_state.show_lang_alert = True
 
-# ---------------- SAFE GEMINI ----------------
+def clean_name(name):
+    name = name.strip()
+    name = re.sub(r"\(.*?\)", "", name)
+    return name.strip()
+
+with open("states-and-districts.json") as f:
+    data = json.load(f)
+
+state_map = {
+    item["state"]: [clean_name(d) for d in item["districts"]]
+    for item in data["states"]
+}
+
+def get_weather(city):
+    try:
+        url = f"http://api.openweathermap.org/data/2.5/weather?q={city},IN&appid={WEATHER_KEY}&units=metric"
+        res = requests.get(url)
+        if res.status_code == 200:
+            return res.json()
+    except:
+        return None
+
+def get_rainfall(weather):
+    if not weather:
+        return None
+    return weather.get("rain", {}).get("1h") or weather.get("rain", {}).get("3h") or 0
+
+def rainfall_status(rain):
+    if rain == 0:
+        return "☀️ No rain"
+    elif rain < 2:
+        return "🌦 Light rain"
+    elif rain < 10:
+        return "🌧 Moderate rain"
+    else:
+        return "⛈ Heavy rain"
+
 def safe_gemini(prompt, fallback):
     try:
         if gemini_model is None:
             return fallback
-        res = gemini_model.generate_content(prompt + f"\n{lang_instruction}")
-        return res.text if res and res.text else fallback
+        res = gemini_model.generate_content(prompt + f"\n{lang_map[lang]}")
+        return res.text if res.text else fallback
     except:
         return fallback
 
-# ---------------- AI FUNCTIONS ----------------
-def simple_reason(crop):
+def why_prompt(crop):
+    return f"Crop: {crop}\nExplain clearly in bullet points with emojis."
+
+def plan_prompt(crop):
+    return f"Crop: {crop}\nGive step-by-step farming plan in bullets."
+
+def risk_prompt(crop):
+    return f"Crop: {crop}\nExplain risks in bullet points."
+
+def crop_weather_advice(crop, weather, rainfall):
     return safe_gemini(
-        f"Explain in simple bullet points why {crop} is suitable for farmer.",
-        f"{crop} suits your soil and weather."
+        f"""
+        Crop: {crop}
+        Temp: {weather['main']['temp']}°C
+        Humidity: {weather['main']['humidity']}%
+        Rainfall: {rainfall} mm
+        Condition: {weather['weather'][0]['description']}
+        Give short bullet farmer advice.
+        """,
+        "No advice"
     )
 
-def simple_plan(crop):
-    return safe_gemini(
-        f"Give practical farming plan for {crop} in simple bullet points.",
-        "Use fertilizer, irrigation and pest control."
-    )
-
-def risks(crop):
-    return safe_gemini(
-        f"What risks farmer should know before growing {crop}? short bullet points.",
-        "Weather and pest risks possible."
-    )
-
-# ---------------- LOAD MODEL ----------------
 with open("model.pkl", "rb") as f:
     model = pickle.load(f)
 
@@ -97,15 +129,24 @@ crop_dict = {
     21: 'watermelon'
 }
 
-# ---------------- HEADER ----------------
-st.markdown("""
-<h1 style='text-align:center;color:#2E7D32;'>🌾 Smart Crop Advisor AI</h1>
-<p style='text-align:center;font-size:18px;'>
-AI-Powered Crop Recommendation • Simple • Farmer Friendly
-</p>
-""", unsafe_allow_html=True)
+c1, c2 = st.columns(2)
 
-# ---------------- INPUT ----------------
+with c1:
+    state = st.selectbox("State", list(state_map.keys()), index=list(state_map.keys()).index("Maharashtra"))
+
+with c2:
+    district = st.selectbox("District", state_map[state], index=state_map[state].index("Pune") if "Pune" in state_map[state] else 0)
+
+weather = get_weather(district)
+api_rain = get_rainfall(weather) if weather else None
+
+if weather:
+    st.info(
+        f"🌦 Temp: {weather['main']['temp']}°C | "
+        f"💧 Humidity: {weather['main']['humidity']}% | "
+        f"{rainfall_status(api_rain)}"
+    )
+
 with st.form("form"):
     c1, c2, c3 = st.columns(3)
 
@@ -115,19 +156,19 @@ with st.form("form"):
         K = st.number_input("Potassium", 0.0, 300.0, 40.0)
 
     with c2:
-        temp = st.number_input("Temperature °C", 0.0, 60.0, 25.0)
-        humidity = st.number_input("Humidity %", 0.0, 100.0, 60.0)
+        temp = st.number_input("Temperature °C", 0.0, 60.0, float(weather['main']['temp']) if weather else 25.0)
+        humidity = st.number_input("Humidity %", 0.0, 100.0, float(weather['main']['humidity']) if weather else 60.0)
 
     with c3:
         ph = st.number_input("Soil pH", 0.0, 14.0, 6.0)
-        rainfall = st.number_input("Rainfall mm", 0.0, 500.0, 100.0)
+        rainfall = st.number_input("Rainfall mm", 0.0, 500.0, float(api_rain) if api_rain is not None else 100.0)
 
     submit = st.form_submit_button("🚀 Predict Crop")
 
-# ---------------- OUTPUT ----------------
 if submit:
     st.session_state.predicted = True
     st.session_state.last_lang = lang
+    st.session_state.show_lang_alert = False
 
     X = pd.DataFrame([{
         "N": N, "P": P, "K": K,
@@ -139,70 +180,66 @@ if submit:
 
     probs = model.predict_proba(X)[0]
     top_idx = probs.argsort()[-3:][::-1]
-    top_probs = probs[top_idx]
-    norm_probs = top_probs / top_probs.sum()
+    norm_probs = probs[top_idx] / probs[top_idx].sum()
 
-    # ---------------- TOP CARDS ----------------
+    scores = [round(p * 100) for p in norm_probs]
+    scores[0] += 100 - sum(scores)
+
     st.subheader("🌱 Top Recommendations")
     cols = st.columns(3)
 
     for i, idx in enumerate(top_idx):
         crop = crop_dict[idx]
-        score = int(norm_probs[i] * 100)
-
+        score = scores[i]
         status = "🟢 Best" if score > 60 else "🟡 Moderate" if score > 30 else "🔴 Risky"
 
         with cols[i]:
             with st.container(border=True):
-                st.subheader(f"{crop.capitalize()}")
+                st.subheader(crop.capitalize())
                 st.progress(score / 100)
-                st.caption(f"{score}% Match • {status}")
+                st.caption(f"{score}% • {status}")
 
-    # ---------------- TABS ----------------
-    tab1, tab2, tab3, tab4 = st.tabs([
-        "📊 Overview",
-        "🤔 Why This Crop",
-        "🧠 Farming Plan",
-        "⚠️ Risks"
-    ])
+    tabs = st.tabs(["📊 Overview","🤔 Why","🧠 Plan","⚠️ Risks"] + (["🌦 Weather Impact"] if weather else []))
 
-    # ---------------- OVERVIEW ----------------
-    with tab1:
+    with tabs[0]:
         df = pd.DataFrame({
             "Crop": [crop_dict[i] for i in top_idx],
-            "Score": norm_probs * 100
+            "Score": scores
         })
+        st.plotly_chart(px.bar(df, x="Crop", y="Score", text="Score"), use_container_width=True)
+        st.success(f"🌾 Suggested Crop: {crop_dict[top_idx[0]].upper()}")
 
-        fig = px.bar(df, x="Crop", y="Score", text="Score", color="Score")
-        st.plotly_chart(fig, use_container_width=True)
+    with tabs[1]:
+        for idx in top_idx:
+            crop = crop_dict[idx]
+            with st.container(border=True):
+                st.markdown(f"### 🌾 {crop.capitalize()}")
+                with st.spinner("Generating..."):
+                    st.markdown(safe_gemini(why_prompt(crop), ""))
 
-        st.success(f"✅ Best Choice: {crop_dict[top_idx[0]].upper()}")
+    with tabs[2]:
+        for idx in top_idx:
+            crop = crop_dict[idx]
+            with st.container(border=True):
+                st.markdown(f"### 🌾 {crop.capitalize()}")
+                with st.spinner("Generating..."):
+                    st.markdown(safe_gemini(plan_prompt(crop), ""))
 
-    # ---------------- WHY ----------------
-    with tab2:
-        with st.spinner("Generating..."):
+    with tabs[3]:
+        for idx in top_idx:
+            crop = crop_dict[idx]
+            with st.container(border=True):
+                st.markdown(f"### 🌾 {crop.capitalize()}")
+                with st.spinner("Generating..."):
+                    st.markdown(safe_gemini(risk_prompt(crop), ""))
+
+    if weather:
+        with tabs[4]:
             for idx in top_idx:
                 crop = crop_dict[idx]
-                st.markdown(f"### 🌾 {crop.capitalize()}")
-                st.write(simple_reason(crop))
-                st.divider()
-
-    # ---------------- PLAN ----------------
-    with tab3:
-        with st.spinner("Generating..."):
-            for idx in top_idx:
-                crop = crop_dict[idx]
-                st.markdown(f"### 🌾 {crop.capitalize()}")
-                st.write(simple_plan(crop))
-                st.divider()
-
-    # ---------------- RISKS ----------------
-    with tab4:
-        with st.spinner("Generating..."):
-            for idx in top_idx:
-                crop = crop_dict[idx]
-                st.markdown(f"### 🌾 {crop.capitalize()}")
-                st.write(risks(crop))
-                st.divider()
+                with st.container(border=True):
+                    st.markdown(f"### 🌾 {crop.capitalize()}")
+                    with st.spinner("Generating..."):
+                        st.markdown(crop_weather_advice(crop, weather, rainfall))
 
     st.caption(f"Generated on {datetime.now().strftime('%d %b %Y')}")
