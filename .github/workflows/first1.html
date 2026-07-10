@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Smart Crop Yield Prediction System</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <!-- Header -->
+        <header class="header">
+            <div class="header-content">
+                <h1>🌾 Smart Crop Yield Prediction System</h1>
+                <p class="subtitle">Advanced Agricultural Analytics & Prediction</p>
+            </div>
+        </header>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <div class="content-wrapper">
+                <!-- Left Panel - Input Form -->
+                <section class="input-section">
+                    <h2>Prediction Inputs</h2>
+                    <form id="predictionForm" class="form">
+                        <!-- Crop Selection -->
+                        <div class="form-group">
+                            <label for="cropType">Crop Type</label>
+                            <select id="cropType" name="cropType" required>
+                                <option value="">Select Crop</option>
+                                <option value="wheat">Wheat</option>
+                                <option value="rice">Rice</option>
+                                <option value="corn">Corn</option>
+                                <option value="soybean">Soybean</option>
+                                <option value="cotton">Cotton</option>
+                                <option value="potato">Potato</option>
+                            </select>
+                        </div>
+
+                        <!-- Temperature -->
+                        <div class="form-group">
+                            <label for="temperature">Temperature (°C)</label>
+                            <input type="number" id="temperature" name="temperature" min="0" max="50" step="0.1" placeholder="e.g., 25" required>
+                            <span class="range-info"><span id="tempValue">0</span>°C</span>
+                        </div>
+
+                        <!-- Rainfall -->
+                        <div class="form-group">
+                            <label for="rainfall">Rainfall (mm)</label>
+                            <input type="number" id="rainfall" name="rainfall" min="0" max="1000" step="0.1" placeholder="e.g., 600" required>
+                            <span class="range-info"><span id="rainfallValue">0</span>mm</span>
+                        </div>
+
+                        <!-- Humidity -->
+                        <div class="form-group">
+                            <label for="humidity">Humidity (%)</label>
+                            <input type="number" id="humidity" name="humidity" min="0" max="100" step="0.1" placeholder="e.g., 60" required>
+                            <span class="range-info"><span id="humidityValue">0</span>%</span>
+                        </div>
+
+                        <!-- Soil Moisture -->
+                        <div class="form-group">
+                            <label for="soilMoisture">Soil Moisture (%)</label>
+                            <input type="range" id="soilMoisture" name="soilMoisture" min="0" max="100" step="1" required>
+                            <span class="range-info"><span id="moistureValue">0</span>%</span>
+                        </div>
+
+                        <!-- pH Level -->
+                        <div class="form-group">
+                            <label for="phLevel">Soil pH Level</label>
+                            <input type="number" id="phLevel" name="phLevel" min="0" max="14" step="0.1" placeholder="e.g., 6.5" required>
+                            <span class="range-info"><span id="phValue">0</span></span>
+                        </div>
+
+                        <!-- Nitrogen -->
+                        <div class="form-group">
+                            <label for="nitrogen">Nitrogen (kg/ha)</label>
+                            <input type="number" id="nitrogen" name="nitrogen" min="0" max="500" step="0.1" placeholder="e.g., 120" required>
+                            <span class="range-info"><span id="nitrogenValue">0</span>kg/ha</span>
+                        </div>
+
+                        <!-- Phosphorus -->
+                        <div class="form-group">
+                            <label for="phosphorus">Phosphorus (kg/ha)</label>
+                            <input type="number" id="phosphorus" name="phosphorus" min="0" max="500" step="0.1" placeholder="e.g., 60" required>
+                            <span class="range-info"><span id="phosphorusValue">0</span>kg/ha</span>
+                        </div>
+
+                        <!-- Potassium -->
+                        <div class="form-group">
+                            <label for="potassium">Potassium (kg/ha)</label>
+                            <input type="number" id="potassium" name="potassium" min="0" max="500" step="0.1" placeholder="e.g., 80" required>
+                            <span class="range-info"><span id="potassiumValue">0</span>kg/ha</span>
+                        </div>
+
+                        <!-- Pesticide Usage -->
+                        <div class="form-group">
+                            <label for="pesticide">Pesticide Usage (L/ha)</label>
+                            <input type="number" id="pesticide" name="pesticide" min="0" max="100" step="0.1" placeholder="e.g., 20" required>
+                            <span class="range-info"><span id="pesticideValue">0</span>L/ha</span>
+                        </div>
+
+                        <!-- Sunlight Hours -->
+                        <div class="form-group">
+                            <label for="sunlight">Average Sunlight (hours/day)</label>
+                            <input type="number" id="sunlight" name="sunlight" min="0" max="24" step="0.1" placeholder="e.g., 8" required>
+                            <span class="range-info"><span id="sunlightValue">0</span>h</span>
+                        </div>
+
+                        <!-- Season -->
+                        <div class="form-group">
+                            <label for="season">Season</label>
+                            <select id="season" name="season" required>
+                                <option value="">Select Season</option>
+                                <option value="kharif">Kharif (Monsoon)</option>
+                                <option value="rabi">Rabi (Winter)</option>
+                                <option value="summer">Summer</option>
+                            </select>
+                        </div>
+
+                        <!-- Buttons -->
+                        <div class="button-group">
+                            <button type="submit" class="btn btn-primary">Predict Yield</button>
+                            <button type="reset" class="btn btn-secondary">Clear</button>
+                        </div>
+                    </form>
+                </section>
+
+                <!-- Right Panel - Results -->
+                <section class="results-section">
+                    <!-- Prediction Result -->
+                    <div class="result-card hidden" id="resultCard">
+                        <h2>Prediction Result</h2>
+                        <div class="result-display">
+                            <div class="yield-result">
+                                <span class="label">Estimated Yield</span>
+                                <span class="value" id="yieldValue">-</span>
+                                <span class="unit">tons/hectare</span>
+                            </div>
+                            <div class="confidence">
+                                <span class="label">Confidence Level</span>
+                                <div class="confidence-bar">
+                                    <div class="confidence-fill" id="confidenceFill"></div>
+                                </div>
+                                <span class="confidence-text" id="confidenceText">0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Recommendations -->
+                    <div class="recommendations-card hidden" id="recommendationsCard">
+                        <h2>Recommendations</h2>
+                        <div class="recommendations-list" id="recommendationsList"></div>
+                    </div>
+
+                    <!-- Chart Section -->
+                    <div class="chart-card hidden" id="chartCard">
+                        <h2>Performance Metrics</h2>
+                        <canvas id="performanceChart"></canvas>
+                    </div>
+
+                    <!-- Historical Data -->
+                    <div class="history-card">
+                        <h2>Prediction History</h2>
+                        <div class="history-list" id="historyList">
+                            <p class="no-data">No predictions yet</p>
+                        </div>
+                    </div>
+                </section>
+            </div>
+        </main>
+
+        <!-- Footer -->
+        <footer class="footer">
+            <p>&copy; 2024 Smart Crop Yield Prediction System. All rights reserved.</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
